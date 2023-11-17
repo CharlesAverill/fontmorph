@@ -1,7 +1,7 @@
 TEXENGINE=pdflatex
 
-FONTSIZE=300
-PTSIZE=12
+FONTSIZE=1200
+PTSIZE=17
 PRECISION=10
 
 RAWCHARS=$(cat contents.txt)
@@ -23,12 +23,25 @@ HAIR_STEM_MAX="1"
 # Bulb diameter
 FLARE_MIN="36/36"
 FLARE_MAX="11/10"
+# Serifs
+JUT_MAX="33/36"
+CAP_JUT_MAX="41/36"
+BEAK_JUT_MAX="11.4/36"
+BEAK_MAX="84/36"
+SERIF_MIN="0"
+
+FINE_MIN="7/36"
+FINE_MAX="25/100"
 
 OVERSHOOT_MIN="9/36"
 OVERSHOOT_MAX="1/10"
 
 function lerp { # lerp a b t
 	echo "scale=${PRECISION}; $1 + ($2 - $1) * $3" | bc
+}
+
+function ilerp {
+  lerp $1 $2 $(echo "scale=${PRECISION}; 1 - $3" | bc)
 }
 
 number_to_string() {
@@ -50,23 +63,43 @@ FONT_DECLS=""
 
 for (( i=0; i<${#CHARS}; i++ )); do
   cp "cmr${PTSIZE}.mf" temp.mf
-  t=$(lerp 0 1 "1 - (${#CHARS}-$i)/${#CHARS}")
+  t=$(lerp 0 1 "1 - (${#CHARS}-$i - 1)/${#CHARS}")
   echo $t
 
   # Do replacements
-  sed -i "s%x_height#:=186/36pt#;%x_height#:=$(lerp $X_HEIGHT_MIN $X_HEIGHT_MAX $t)pt#;%g" temp.mf
+  sed -i "s%x_height#.*%x_height#:=$(lerp $X_HEIGHT_MIN $X_HEIGHT_MAX $t)pt#;%g" temp.mf
+  sed -i "s%bar_height#.*%bar_height#:=$(lerp $BAR_HEIGHT_MIN $BAR_HEIGHT_MAX $t)pt#;%g" temp.mf
+  sed -i "s%desc_depth#.*%desc_depth#:=$(lerp $DESC_DEPTH_MIN $DESC_DEPTH_MAX $t)pt#;%g" temp.mf
+  sed -i "s%\^hair#.*%hair#:=$(lerp $LHAIR_MIN $HAIR_STEM_MAX $t)pt#;%g" temp.mf
+  sed -i "s%\^stem#.*%stem#:=$(lerp $LSTEM_MIN $HAIR_STEM_MAX $t)pt#;%g" temp.mf
+  sed -i "s%cap_hair#.*%cap_hair#:=$(lerp $UHAIR_MIN $HAIR_STEM_MAX $t)pt#;%g" temp.mf
+  sed -i "s%cap_stem#.*%cap_stem#:=$(lerp $USTEM_MIN $HAIR_STEM_MAX $t)pt#;%g" temp.mf
+  sed -i "s%flare#.*%flare#:=$(lerp $FLARE_MIN $FLARE_MAX $t)pt#;%g" temp.mf
+  sed -i "s%jut#.*%jut#:=$(ilerp $SERIF_MIN $JUT_MAX $t)pt#;%g" temp.mf
+  sed -i "s%cap_jut#.*%cap_jut#:=$(ilerp $SERIF_MIN $CAP_JUT_MAX $t)pt#;%g" temp.mf
+  sed -i "s%beak_jut#.*%beak_jut#:=$(ilerp $SERIF_MIN $BEAK_JUT_MAX $t)pt#;%g" temp.mf
+  sed -i "s%beak#.*%beak#:=$(ilerp $SERIF_MIN $BEAK_MAX $t)pt#;%g" temp.mf
+  sed -i "s%^fine#.*%fine#:=$(lerp $FINE_MIN $FINE_MAX $t)pt#;%g" temp.mf
 
   # Compile
-  mf -halt-on-error '\mode=cx;' input temp.mf
+  MFO=$(mf -halt-on-error '\mode=cx; mag=4;' input temp.mf)
+  if [ $? -ne 0 ]; then 
+    cat temp.mf
+    echo $MFO
+    exit $1
+  fi
 
   # Copy fonts out
   mv temp.tfm ../"font$i.tfm"
-  gftopk "temp.${FONTSIZE}gf"
+  gftopk "temp.${FONTSIZE}gf" > /dev/null
+  gftodvi "temp.${FONTSIZE}gf" > /dev/null
   mv "temp.${FONTSIZE}pk" ../"font$i.${FONTSIZE}pk"
 
   NUMLET=$(number_to_string $i)
-  FONT_DECLS+="\newfont{\font$NUMLET}{out/font$i}"
+  FONT_DECLS+="\newfont{\font$NUMLET}{font$i}"
 done
+
+cat temp.mf
 
 cd ..
 
@@ -101,5 +134,5 @@ $TEXENGINE temp.tex
 
 # Cleanup
 rm temp.tex
-rm *300pk *.tfm
+rm *"${FONTSIZE}pk" *.tfm
 mv temp.pdf main.pdf
