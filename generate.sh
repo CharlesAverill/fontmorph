@@ -10,6 +10,8 @@ N_CHARS=${#CHARS}
 
 X_HEIGHT_MIN="186/36"
 X_HEIGHT_MAX="64/10"
+CAP_HEIGHT_MAX="425/36"
+CAP_HEIGHT_MIN="74/10"
 # Described in "The Concept of a Meta-Font" as e-height
 BAR_HEIGHT_MIN="104.4/36"
 BAR_HEIGHT_MAX="32/10"
@@ -28,13 +30,14 @@ JUT_MAX="33/36"
 CAP_JUT_MAX="41/36"
 BEAK_JUT_MAX="11.4/36"
 BEAK_MAX="84/36"
+BRACKET_MAX="34/36"
 SERIF_MIN="0"
 
 FINE_MIN="7/36"
 FINE_MAX="25/100"
 
-OVERSHOOT_MIN="9/36"
-OVERSHOOT_MAX="1/10"
+OVERSHOOT_MAX="10/36"
+OVERSHOOT_MIN="1/10"
 
 function lerp { # lerp a b t
 	echo "scale=${PRECISION}; $1 + ($2 - $1) * $3" | bc
@@ -68,6 +71,7 @@ for (( i=0; i<${#CHARS}; i++ )); do
 
   # Do replacements
   sed -i "s%x_height#.*%x_height#:=$(lerp $X_HEIGHT_MIN $X_HEIGHT_MAX $t)pt#;%g" temp.mf
+  sed -i "s%cap_height#.*%cap_height#:=$(ilerp $CAP_HEIGHT_MIN $CAP_HEIGHT_MAX $t)pt#;%g" temp.mf
   sed -i "s%bar_height#.*%bar_height#:=$(lerp $BAR_HEIGHT_MIN $BAR_HEIGHT_MAX $t)pt#;%g" temp.mf
   sed -i "s%desc_depth#.*%desc_depth#:=$(lerp $DESC_DEPTH_MIN $DESC_DEPTH_MAX $t)pt#;%g" temp.mf
   sed -i "s%\^hair#.*%hair#:=$(lerp $LHAIR_MIN $HAIR_STEM_MAX $t)pt#;%g" temp.mf
@@ -79,7 +83,13 @@ for (( i=0; i<${#CHARS}; i++ )); do
   sed -i "s%cap_jut#.*%cap_jut#:=$(ilerp $SERIF_MIN $CAP_JUT_MAX $t)pt#;%g" temp.mf
   sed -i "s%beak_jut#.*%beak_jut#:=$(ilerp $SERIF_MIN $BEAK_JUT_MAX $t)pt#;%g" temp.mf
   sed -i "s%beak#.*%beak#:=$(ilerp $SERIF_MIN $BEAK_MAX $t)pt#;%g" temp.mf
+  sed -i "s%bracket#.*%bracket#:=$(ilerp $SERIF_MIN $BRACKET_MAX $t)pt#;%g" temp.mf
+  sed -i "s%^o#.*%o#:=$(ilerp $OVERSHOOT_MIN $OVERSHOOT_MAX $t)pt#;%g" temp.mf
   sed -i "s%^fine#.*%fine#:=$(lerp $FINE_MIN $FINE_MAX $t)pt#;%g" temp.mf
+
+  if (( $(echo "$t > 0.5" |bc -l) )); then 
+    sed -i "s%^serifs:=true;%serifs:=false;%g" temp.mf
+  fi
 
   # Compile
   MFO=$(mf -halt-on-error '\mode=cx; mag=4;' input temp.mf)
@@ -106,9 +116,9 @@ cd ..
 rm mf/temp*
 
 # font declaration replacements
-cp main.tex temp.tex
+cp main.tex out.tex
 ESCAPED_REPLACE=$(printf '%s\n' "$FONT_DECLS" | sed -e 's/[\/&]/\\&/g')
-sed -i "s#FONTDECLS#$ESCAPED_REPLACE#g" temp.tex
+sed -i "s#FONTDECLS#$ESCAPED_REPLACE#g" out.tex
 
 # content replacements
 TO_INSERT=""
@@ -126,13 +136,13 @@ for (( i=0; i < ${#RAWCHARS}; i++ )); do
   n=$(echo "$n + 1" | bc);
 done
 ESCAPED_REPLACE=$(printf '%s\n' "$TO_INSERT" | sed -e 's/[\/&]/\\&/g')
-sed -i "s#CONTENTS#$ESCAPED_REPLACE#g" temp.tex
+sed -i "s#CONTENTS#$ESCAPED_REPLACE#g" out.tex
 
-cat temp.tex
+cat out.tex
 
-$TEXENGINE temp.tex
+$TEXENGINE out.tex
 
 # Cleanup
-rm temp.tex
-rm *"${FONTSIZE}pk" *.tfm
-mv temp.pdf main.pdf
+# rm out.tex
+# rm *"${FONTSIZE}pk" *.tfm
+mv out.pdf main.pdf
